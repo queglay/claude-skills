@@ -11,15 +11,33 @@ resets, clock in and pick up from your own handover note.
 
 ## The meter
 
-[`scripts/usage-check`](scripts/usage-check) prints one line:
+Two ways to read the meters, in preference order:
 
-    <five_hr%> <seven_day%> <five_hr_reset_iso> <seven_day_reset_iso>
+1. **Statusline tee (no secrets, any platform).** Claude Code feeds its
+   statusline script a JSON payload on stdin that already contains
+   `rate_limits.five_hour.used_percentage`,
+   `rate_limits.seven_day.used_percentage`, and their `resets_at` epochs
+   (see the statusline docs' JSON schema). Configure a statusline script
+   that tees that payload to a file (e.g.
+   `~/.claude/statusline-latest.json`) and read the file each turn. No
+   credential is touched; works wherever Claude Code runs. Limitation:
+   the file only updates while a session is active, so check its mtime —
+   a stale file is a broken meter, not a low reading.
+2. **OAuth endpoint fallback.**
+   [`scripts/usage-check`](scripts/usage-check) prints one line:
 
-It reads the Claude Code OAuth token from the macOS Keychain at runtime —
-nothing is stored. Install once: copy to `~/.local/bin/usage-check` and
-`chmod +x` it. A `?` in any field, or a reset timestamp in the past, means
-the meter is broken: report that and ask the user rather than guess
-headroom.
+       <five_hr%> <seven_day%> <five_hr_reset_iso> <seven_day_reset_iso>
+
+   It reads Claude Code's own OAuth token at runtime from wherever the
+   platform stores it — macOS Keychain, else
+   `$CLAUDE_CONFIG_DIR/.credentials.json` (`~/.claude` on
+   Linux/containers). Nothing new is stored and no user-managed secret is
+   required. Install once: copy to `~/.local/bin/usage-check` and
+   `chmod +x` it.
+
+Either way: a `?` or missing field, or a reset timestamp in the past,
+means the meter is broken — report that and ask the user rather than
+guess headroom.
 
 ## The shift
 
@@ -50,9 +68,12 @@ headroom.
 
 ## Guardrails
 
-- The seven-day meter is the long fuse: past its own wall (default 80%),
-  surface to the user and stop looping — sleeping recovers a five-hour
-  window, never a weekly cap.
+- The seven-day meter is the long fuse, with its **own wall — default
+  90%**. This is a separate knob from the five-hour wall in step 2; the
+  two defaults happen to share the value 90% but govern different
+  windows and different responses. Past the five-hour wall you sleep to
+  the reset; past the seven-day wall you surface to the user and stop
+  looping — sleeping recovers a five-hour window, never a weekly cap.
 - One sleeper at a time: before scheduling a wake, confirm no earlier wake
   is already pending, so two shifts never overlap.
 - The handover note is the single source of truth for resume state; trust
