@@ -1,6 +1,6 @@
 # Contributing
 
-Changes land via GitLab merge requests. Commits may come from a human or an
+Changes land via GitHub pull requests. Commits may come from a human or an
 automated agent; these conventions keep history machine-readable either way,
 and deliberately match the counterpart repo — one convention everywhere.
 
@@ -46,10 +46,10 @@ surprises a fresh clone). Enable it once per clone:
 git config core.hooksPath .githooks
 ```
 
-## Merge requests
+## Pull requests
 
-- One logical change per MR; keep diffs small and reviewable.
-- The MR **title** follows the same Conventional Commits format as a commit
-  subject: the project's squash template prefills the squash commit from the
-  MR title and description, so a non-conventional title becomes a
+- One logical change per PR; keep diffs small and reviewable.
+- The PR **title** follows the same Conventional Commits format as a commit
+  subject: the repo's squash settings prefill the squash commit from the
+  PR title and description, so a non-conventional title becomes a
   non-conventional commit on merge.
