@@ -1,0 +1,33 @@
+#!/bin/sh
+# Conventional Commits validator.
+# Opt in with:  git config core.hooksPath .githooks
+# Rejects commit messages whose subject line does not match:
+#   <type>(<optional scope>)!?: <summary>
+# See CONTRIBUTING.md.
+
+msg_file="$1"
+
+# First non-comment, non-blank line = the subject.
+subject="$(grep -v '^#' "$msg_file" | grep -v '^[[:space:]]*$' | head -n1)"
+
+# Let git's own generated subjects through.
+case "$subject" in
+  "Merge "*|"Revert "*|"fixup! "*|"squash! "*) exit 0 ;;
+esac
+
+types='feat|fix|docs|refactor|perf|test|build|ci|chore|revert'
+
+if printf '%s' "$subject" | grep -Eq "^(${types})(\([a-z0-9._-]+\))?!?: .+"; then
+  # Soft length check: warn but do not block.
+  if [ "${#subject}" -gt 72 ]; then
+    echo "! commit-msg: subject is ${#subject} chars (>72); consider shortening." >&2
+  fi
+  exit 0
+fi
+
+echo "✗ commit-msg: subject does not follow Conventional Commits." >&2
+echo "  subject : $subject" >&2
+echo "  expected: <type>(<scope>)?: <summary>   type is one of {${types}}" >&2
+echo "  example : feat(executor): add herdr-backed adapter" >&2
+echo "  See CONTRIBUTING.md." >&2
+exit 1

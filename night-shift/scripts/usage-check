@@ -1,0 +1,37 @@
+#!/bin/sh
+# usage-check — print Claude subscription usage on one line:
+#   <five_hr%> <seven_day%> <five_hr_reset_iso> <seven_day_reset_iso>
+# Reads Claude Code's own OAuth token at runtime from wherever Claude Code
+# stores it on this platform — macOS Keychain, else
+# $CLAUDE_CONFIG_DIR/.credentials.json (~/.claude on Linux/containers).
+# Nothing new is stored. Fields print "?" when the API omits them.
+# Prefer the statusline meter (see SKILL.md) — it needs no credential access.
+set -eu
+CREDS=""
+if command -v security >/dev/null 2>&1; then
+  CREDS=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null || true)
+fi
+if [ -z "$CREDS" ]; then
+  CRED_FILE="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.credentials.json"
+  [ -r "$CRED_FILE" ] && CREDS=$(cat "$CRED_FILE")
+fi
+[ -n "$CREDS" ] || { echo "usage-check: no Claude Code credentials found" >&2; exit 1; }
+TOKEN=$(printf '%s' "$CREDS" \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["claudeAiOauth"]["accessToken"])')
+curl -sf --max-time 15 https://api.anthropic.com/api/oauth/usage \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "anthropic-beta: oauth-2025-04-20" \
+  | python3 -c '
+import sys, json
+d = json.load(sys.stdin)
+def pct(w):
+    if not w: return "?"
+    u = w.get("utilization")
+    return str(round(u)) if u is not None else "?"
+def reset(w):
+    if not w: return "?"
+    return w.get("resets_at") or "?"
+five = d.get("five_hour") or {}
+seven = d.get("seven_day") or {}
+print(pct(five), pct(seven), reset(five), reset(seven))
+'
