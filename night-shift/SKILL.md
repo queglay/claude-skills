@@ -42,15 +42,37 @@ guess headroom.
 ## The shift
 
 1. **Open the shift log.** Record the goal and a resume point (task list or
-   a notes file) — the handover note. Done when a fresh context could
-   resume the work from the note alone.
+   a notes file) — the handover note. Confirm the meter reads cleanly here,
+   before committing to the run — a `?`, a stale tee, or a reset already in
+   the past means you would be flying blind, so fix the meter or hand back
+   to the user rather than start an autonomous shift on a broken gauge.
+   Done when a fresh context could resume the work from the note alone.
 2. **Meter every turn.** Run the meter after each unit of work. Under the
-   wall — default 90% five-hour — keep working.
+   wall — default 90% five-hour — keep working. **A batch counts as one
+   chunk.** A turn that fans out nested Claude work — a background
+   `claude -p` sweep, a workflow, parallel subagents — burns *between*
+   meter reads, in a **blind stretch**, by an amount you cannot reliably
+   predict: an innocuous-looking run may itself spawn more Claude, so a raw
+   count of invocations is not a cost. Do not trust a prediction — bound
+   the blind stretch so a wrong guess cannot breach:
+   - **Cap it.** Never launch a fan-out whose projected burn exceeds a
+     small fraction of your *remaining* headroom to the wall — default **a
+     fifth of what is left**. Then a batch that costs several times its
+     estimate still lands short of the wall.
+   - **Or split it.** If it will not fit under the cap, break it into
+     smaller batches with a meter read between each — one blind stretch
+     becomes several metered ones, restoring the reactive wall's sight.
+   - **Measure, don't guess.** To run a batch too big to split, first
+     launch the smallest useful slice, meter the delta, and size the rest
+     from that *measured* per-unit cost.
+   Re-meter the moment a batch returns — read the meter on the near side
+   of a long stretch, not only the far side.
 3. **Clock out ahead of the wall.** When the current reading plus the next
-   atomic chunk would cross the wall, checkpoint now: commit and push
-   what's in flight, bring the handover note current. Pausing a few percent
-   early is cheap; getting cut mid-refactor is not. Done when the working
-   tree is clean and the note says exactly where to pick up.
+   atomic chunk — a batch counted whole — would cross the wall, checkpoint
+   now: commit and push what's in flight, bring the handover note current.
+   Pausing a few percent early is cheap; getting cut mid-refactor is not.
+   Done when the working tree is clean and the note says exactly where to
+   pick up.
 4. **Sleep to the reset.** Schedule the wake with a background shell
    command that sleeps until `five_hr_reset` plus a 30s margin — its
    completion re-invokes you. BSD/macOS date arithmetic:
@@ -68,6 +90,20 @@ guess headroom.
 
 ## Guardrails
 
+- **The reactive wall: a usage-limit error is a breach, not a retry.** The
+  meter in step 2 is the *predictive* wall — it clocks you out before the
+  burn lands. This is the backstop for when a burst outruns it. If any
+  operation comes back with a usage-limit / 429 / "session limit" /
+  "usage limit" error — a main turn, a subagent, or a nested `claude -p`
+  inside a batch — the wall is already crossed. Clock out immediately:
+  stop launching work, do **not** retry the failed call or let the batch
+  keep firing, checkpoint the handover note, and sleep to the reset named
+  in the error (or the meter). A limit error is proof, not noise — never
+  book a "you've hit your session limit" reply as a result, and treat any
+  tool that invokes Claude on your behalf as required to surface that
+  error, not swallow it as data. A batch that returns limit errors
+  produced no data — discard it and resume it after the reset, do not
+  read its output as findings.
 - The seven-day meter is the long fuse, with its **own wall — default
   90%**. This is a separate knob from the five-hour wall in step 2; the
   two defaults happen to share the value 90% but govern different
