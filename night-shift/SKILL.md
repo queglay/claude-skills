@@ -39,6 +39,36 @@ Either way: a `?` or missing field, or a reset timestamp in the past,
 means the meter is broken — report that and ask the user rather than
 guess headroom.
 
+## The enforced gate (backstop to step 2)
+
+Metering every turn is *discipline*, and discipline alone once failed: a
+run launched unmetered blind stretches — a background build, nested
+subagents, a workflow — and drove five-hour from under-wall to 100% with
+no clock-out. So the wall is also enforced in code.
+
+[`scripts/meter-gate.py`](scripts/meter-gate.py) is a `PreToolUse` hook
+(registered in `settings.json` for `Agent|Task|Workflow|Bash`). It is
+**sentinel-gated**: it does nothing unless the shift sentinel
+`~/.claude/night-shift-active` exists, so normal sessions are unaffected.
+While a shift is open it reads the five-hour meter before every fan-out
+launcher — `Agent`/`Task`/`Workflow`, and `Bash` only when
+`run_in_background` is true — and **denies the launch (exit 2)** when the
+clean five-hour percentage is at or over the wall (read from the sentinel's
+first line, default 90).
+
+It is a pre-launch **floor, not the whole wall**, and does not replace
+step 2:
+- It stops a *new* blind stretch from *starting* past the wall. It cannot
+  interrupt a single in-flight fan-out that overshoots, and for a workflow
+  it gates the top-level launch, not the agents the workflow spawns
+  internally.
+- It does **not** enforce the ⅕-headroom cap — that stays your job in
+  step 2. The gate only catches the gross "already at the wall" case.
+- Foreground `Bash` is never gated (git, checks, edits stay fast).
+- It **fails open**: any meter error → allow. A broken gate must never
+  brick the session, so the model's own clock-out discipline remains the
+  primary wall; the gate is the backstop.
+
 ## The shift
 
 1. **Open the shift log.** Record the goal and a resume point (task list or
@@ -46,6 +76,11 @@ guess headroom.
    before committing to the run — a `?`, a stale tee, or a reset already in
    the past means you would be flying blind, so fix the meter or hand back
    to the user rather than start an autonomous shift on a broken gauge.
+   Then **arm the enforced gate**: write the sentinel with the wall percent
+   so the backstop is live for the whole shift —
+
+       printf '90\n' > ~/.claude/night-shift-active
+
    Done when a fresh context could resume the work from the note alone.
 2. **Meter every turn.** Run the meter after each unit of work. Under the
    wall — default 90% five-hour — keep working. **A batch counts as one
@@ -86,7 +121,10 @@ guess headroom.
 5. **Clock in.** On wake, run the meter to confirm the window reset, read
    the handover note, and return to step 2.
 6. **Close the shift** when the task itself is complete, with whatever
-   report the task's own instructions call for.
+   report the task's own instructions call for. **Disarm the gate** —
+   remove the sentinel so it stops metering ordinary future sessions:
+
+       rm -f ~/.claude/night-shift-active
 
 ## Guardrails
 
@@ -112,5 +150,10 @@ guess headroom.
   looping — sleeping recovers a five-hour window, never a weekly cap.
 - One sleeper at a time: before scheduling a wake, confirm no earlier wake
   is already pending, so two shifts never overlap.
+- A **stale sentinel** (a shift that crashed without reaching step 6) only
+  ever *over*-protects — it meters a normal session and, near the wall,
+  blocks a fan-out that discipline would have caught anyway. It never
+  destroys work. If an ordinary session is unexpectedly gated, clear it
+  with `rm -f ~/.claude/night-shift-active`.
 - The handover note is the single source of truth for resume state; trust
   it over memory of what you "were doing".
