@@ -152,6 +152,53 @@ step 2:
 
        rm -f ~/.claude/night-shift/"$CLAUDE_CODE_SESSION_ID"
 
+## With background agents
+
+When a shift also dispatches background agents, subagents, or workflows,
+the skill's duties split in exactly one way:
+
+- **The orchestrator owns the window.** Only the orchestrator reads the
+  meter to pace, caps blind stretches, clocks out, sleeps to the reset,
+  and resumes. Resuming an interrupted batch is the orchestrator's job
+  alone: after the reset it re-dispatches from the handover note — agents
+  never pick their own work back up, never sleep, and never wait for a
+  window reset. A sleeping subagent is just a stalled task holding a
+  half-done worktree, invisible to pacing.
+- **Each background agent is one blind stretch** (step 2). Read the meter
+  immediately before dispatch and again the moment the agent returns; the
+  measured delta — never a prediction from task shape — is the per-batch
+  cost that gates the next dispatch under the step-2 cap. Record both
+  readings in the handover note so a resumed session inherits measured
+  costs, not guesses.
+- **Bounding the blind stretch is a dispatch-time decision.** Agents
+  cannot do it for you — if the projected batch does not fit under the
+  step-2 cap, split it or measure a smaller slice first; do not dispatch
+  and hope.
+- **Every dispatch brief carries the agent's duties verbatim.** Agents
+  never load this skill — the brief text is all they see — so paste this
+  block into the brief rather than paraphrasing it (a paraphrase drops
+  the sharp edges):
+
+  > Before starting any work, run the usage meter
+  > (`~/.local/bin/usage-check`). If the five-hour percentage is at or
+  > over the wall, do no work: return a no-work report and touch
+  > nothing.
+  >
+  > Treat any usage-limit / 429 / "usage limit" error from any tool
+  > call as a hard wall: stop launching work, never retry through it,
+  > and never book its output as a result. Leave the tree in a
+  > precisely-described state — committed if complete and verified,
+  > otherwise say exactly what is dirty — and return a fast, clean
+  > handover.
+  >
+  > Never sleep or wait for a window reset. Hitting the wall means hand
+  > over fast.
+
+  The agent's pre-start meter check stays even though the orchestrator
+  already gated the dispatch: a start can lag its dispatch badly (queued
+  workflow slots free up long after launch), so the wall may have moved
+  between the orchestrator's reading and the agent's first tool call.
+
 ## Guardrails
 
 - **The reactive wall: a usage-limit error is a breach, not a retry.** The
